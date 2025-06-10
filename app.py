@@ -12,10 +12,13 @@ from sklearn.preprocessing import StandardScaler
 st.set_page_config(page_title="Car Classifier", layout="wide")
 
 # Sidebar
-page = st.sidebar.selectbox("Select Page", ["Data Preview", "Visualizations", "Modeling"])
+page = st.sidebar.selectbox("Select Page", ["Data Preview", "Visualizations", "Modeling", "Prediction"])
 uploaded_file = st.sidebar.file_uploader("Upload your car dataset CSV", type=["csv"])
 
 # Shared logic
+model = None
+scaler = None
+X = None
 if uploaded_file is not None:
     df = pd.read_csv(uploaded_file)
     df = df.dropna()
@@ -40,18 +43,22 @@ if uploaded_file is not None:
         if col in X.columns:
             X = X.drop(col, axis=1)
 
-    # Reduce noise (fewer noise columns)
+    # Reduce noise
     for i in range(2):
         np.random.seed(i)
         X[f"noise_{i}"] = np.random.rand(X.shape[0])
 
-    # Train-test split (now with shuffle)
+    # Train-test split
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, shuffle=True, random_state=42)
 
     # Standardization
     scaler = StandardScaler()
     X_train = scaler.fit_transform(X_train)
     X_test = scaler.transform(X_test)
+
+    # Fit model
+    model = LogisticRegression(max_iter=100, C=0.5, solver="liblinear")
+    model.fit(X_train, y_train)
 
 # Page 1 - Data Preview
 if page == "Data Preview":
@@ -92,11 +99,7 @@ elif page == "Visualizations":
 elif page == "Modeling":
     st.title("🤖 Logistic Regression Model")
     if uploaded_file is not None:
-        # Slightly stronger model (higher C)
-        model = LogisticRegression(max_iter=100, C=0.5, solver="liblinear")
-        model.fit(X_train, y_train)
         y_pred = model.predict(X_test)
-
         acc = accuracy_score(y_test, y_pred)
         st.metric(label="🎯 Model Accuracy", value=f"{acc:.2f}")
 
@@ -123,3 +126,47 @@ elif page == "Modeling":
         st.bar_chart(coef.sort_values(ascending=False))
     else:
         st.info("Upload dataset to train the model.")
+
+# Page 4 - Prediction
+elif page == "Prediction":
+    st.title("🔮 Predict Car Price Category")
+    if uploaded_file is not None and model is not None and scaler is not None:
+        with st.form("prediction_form"):
+            brand = st.selectbox("Brand", df["Brand"].unique())
+            body = st.selectbox("Body Type", df["Body"].unique())
+            mileage = st.number_input("Mileage", min_value=0)
+            engine_type = st.selectbox("Engine Type", df["Engine Type"].unique())
+            registration = st.selectbox("Registered?", df["Registration"].unique())
+            year = st.number_input("Year", min_value=1980, max_value=2025)
+
+            submit = st.form_submit_button("Predict")
+
+        if submit:
+            # Create input dictionary
+            input_dict = {
+                "Mileage": mileage,
+                "Year": year,
+                f"Brand_{brand}": 1,
+                f"Body_{body}": 1,
+                f"Engine Type_{engine_type}": 1,
+                f"Registration_{registration}": 1
+            }
+
+            input_df = pd.DataFrame([input_dict])
+
+            # Add all required columns
+            for col in X.columns:
+                if col not in input_df.columns:
+                    input_df[col] = 0
+            input_df = input_df[X.columns]  # match order
+
+            # Scale and predict
+            input_scaled = scaler.transform(input_df)
+            pred = model.predict(input_scaled)[0]
+            prob = model.predict_proba(input_scaled)[0][1]
+
+            st.subheader("🧾 Prediction Result")
+            st.success(f"Predicted Price Category: {'Above 15,000' if pred==1 else '15,000 or Below'}")
+            st.info(f"Confidence: {prob:.2%}")
+    else:
+        st.info("Upload a dataset and train the model to make predictions.")
