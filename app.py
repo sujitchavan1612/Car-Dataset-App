@@ -22,7 +22,7 @@ df = pd.read_csv(url)
 df = df.dropna()
 
 # Create binary target
-df["Target"] = (df["Price"] > 15000).astype(int)
+df["Target"] = (df["Price"] > 30000).astype(int)
 
 # Drop potential data leakage columns
 df = df.drop(["Price", "Model"], axis=1, errors="ignore")
