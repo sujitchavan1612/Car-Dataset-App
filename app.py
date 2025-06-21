@@ -19,31 +19,25 @@ uploaded_file = st.sidebar.file_uploader("Upload your car dataset CSV", type=["c
 model = None
 scaler = None
 X = None
+df = None
+df_encoded = None
 if uploaded_file is not None:
     df = pd.read_csv(uploaded_file)
     df = df.dropna()
+
+    # Create binary target
     df["Target"] = (df["Price"] > 15000).astype(int)
 
-    if "Model" in df.columns:
-        df = df.drop("Model", axis=1)
+    # Drop potential data leakage columns before encoding
+    df = df.drop(["Price", "Model"], axis=1, errors="ignore")
 
-    # Encode categoricals
+    # Encode categorical variables
     df_encoded = pd.get_dummies(df, drop_first=True)
 
     X = df_encoded.drop("Target", axis=1)
     y = df_encoded["Target"]
 
-    # Restore mildly predictive features
-    for col in ["Mileage", "Year"]:
-        if col not in X.columns and col in df_encoded.columns:
-            X[col] = df_encoded[col]
-
-    # Drop very strong predictors
-    for col in ["Price", "EngineV"]:
-        if col in X.columns:
-            X = X.drop(col, axis=1)
-
-    # Reduce noise
+    # Inject random noise for realism testing
     for i in range(2):
         np.random.seed(i)
         X[f"noise_{i}"] = np.random.rand(X.shape[0])
@@ -56,7 +50,7 @@ if uploaded_file is not None:
     X_train = scaler.fit_transform(X_train)
     X_test = scaler.transform(X_test)
 
-    # Fit model
+    # Model training
     model = LogisticRegression(max_iter=100, C=0.5, solver="liblinear")
     model.fit(X_train, y_train)
 
@@ -75,18 +69,20 @@ elif page == "Visualizations":
     st.title("📈 Visualizations")
     if uploaded_file is not None:
         col1, col2 = st.columns(2)
+
         with col1:
             if "EngineV" in df.columns:
                 st.write("Engine Size vs Price")
                 fig1, ax1 = plt.subplots()
-                sns.scatterplot(data=df, x="EngineV", y="Price", hue="Target", ax=ax1)
+                sns.scatterplot(data=df, x="EngineV", y="Target", hue="Target", ax=ax1)
                 st.pyplot(fig1)
 
         with col2:
-            st.write("Mileage Distribution")
-            fig2, ax2 = plt.subplots()
-            sns.histplot(df["Mileage"], kde=True, ax=ax2)
-            st.pyplot(fig2)
+            if "Mileage" in df.columns:
+                st.write("Mileage Distribution")
+                fig2, ax2 = plt.subplots()
+                sns.histplot(df["Mileage"], kde=True, ax=ax2)
+                st.pyplot(fig2)
 
         st.subheader("Correlation Heatmap")
         fig3, ax3 = plt.subplots(figsize=(10, 6))
@@ -98,29 +94,26 @@ elif page == "Visualizations":
 # Page 3 - Modeling
 elif page == "Modeling":
     st.title("🤖 Logistic Regression Model")
-    if uploaded_file is not None:
+    if uploaded_file is not None and model is not None:
         y_pred = model.predict(X_test)
         acc = accuracy_score(y_test, y_pred)
         st.metric(label="🎯 Model Accuracy", value=f"{acc:.2f}")
 
         if acc > 0.90:
-            st.warning("⚠️ Accuracy above 90%. Consider reducing features.")
+            st.warning("⚠️ Accuracy above 90%. Consider reducing strong predictors.")
         elif acc < 0.80:
-            st.warning("⚠️ Accuracy still below 80%. Add mildly useful features or reduce noise.")
+            st.warning("⚠️ Accuracy below 80%. Add useful features or reduce noise.")
         else:
-            st.success("✅ Accuracy is between 80% and 90% — perfect for real-world conditions.")
+            st.success("✅ Accuracy is between 80% and 90% — acceptable for real-world data.")
 
-        # Classification Report
         st.subheader("📋 Classification Report")
         st.text(classification_report(y_test, y_pred))
 
-        # Confusion Matrix
         st.subheader("🔍 Confusion Matrix")
         fig4, ax4 = plt.subplots()
         sns.heatmap(confusion_matrix(y_test, y_pred), annot=True, fmt='d', cmap='Blues', ax=ax4)
         st.pyplot(fig4)
 
-        # Feature Importance
         st.subheader("📊 Feature Importance")
         coef = pd.Series(model.coef_[0], index=X.columns)
         st.bar_chart(coef.sort_values(ascending=False))
@@ -142,7 +135,7 @@ elif page == "Prediction":
             submit = st.form_submit_button("Predict")
 
         if submit:
-            # Create input dictionary
+            # Create input dict
             input_dict = {
                 "Mileage": mileage,
                 "Year": year,
@@ -152,13 +145,14 @@ elif page == "Prediction":
                 f"Registration_{registration}": 1
             }
 
+            # Remove unseen keys
+            input_dict = {k: v for k, v in input_dict.items() if k in X.columns}
             input_df = pd.DataFrame([input_dict])
 
-            # Add all required columns
             for col in X.columns:
                 if col not in input_df.columns:
                     input_df[col] = 0
-            input_df = input_df[X.columns]  # match order
+            input_df = input_df[X.columns]  # ensure column order
 
             # Scale and predict
             input_scaled = scaler.transform(input_df)
@@ -167,6 +161,12 @@ elif page == "Prediction":
 
             st.subheader("🧾 Prediction Result")
             st.success(f"Predicted Price Category: {'Above 15,000' if pred==1 else '15,000 or Below'}")
-            st.info(f"Confidence: {prob:.2%}")
+
+            if prob > 0.85:
+                st.success(f"Confidence: {prob:.2%} — Very Strong Prediction")
+            elif prob < 0.6:
+                st.warning(f"Confidence: {prob:.2%} — Weak Prediction, revise input or model")
+            else:
+                st.info(f"Confidence: {prob:.2%}")
     else:
         st.info("Upload a dataset and train the model to make predictions.")
