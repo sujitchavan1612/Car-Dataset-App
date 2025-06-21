@@ -143,7 +143,7 @@ elif page == "Prediction":
         prob = model.predict_proba(input_scaled)[0][1]
 
         st.subheader("🧾 Prediction Result")
-        st.success(f"Predicted Price Category: {'Above 15,000' if pred==1 else '15,000 or Below'}")
+        st.success(f"Predicted Price Category: {'Above 50,000' if pred==1 else '50,000 or Below'}")
 
         if prob > 0.85:
             st.success(f"Confidence: {prob:.2%} — Very Strong Prediction")
