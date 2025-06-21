@@ -15,7 +15,7 @@ st.set_page_config(page_title="Car Classifier", layout="wide")
 page = st.sidebar.selectbox("Select Page", ["Data Preview", "Visualizations", "Modeling", "Prediction"])
 
 # 🚨 Replace this URL with your actual dataset URL (raw CSV link)
-url = "https://raw.githubusercontent.com/your-username/your-repo/main/car_data.csv"
+url = "https://raw.githubusercontent.com/sujitchavan1612/Car-Dataset-App/refs/heads/main/1.04.%20Real-life%20example.csv"
 
 # Load dataset directly from URL
 df = pd.read_csv(url)
